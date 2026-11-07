@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { FormEvent, ReactNode } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import type { FormEvent, ReactNode, RefObject } from "react";
 
 type Todo = {
   id: string;
@@ -171,6 +171,57 @@ function ClipboardIcon({ className }: { className?: string }) {
   );
 }
 
+// 開いたときは先頭の「キャンセル」にフォーカスが入り、Enter の連打では実行されない
+function ConfirmDialog({
+  dialogRef,
+  title,
+  description,
+  confirmLabel,
+  onConfirm,
+}: {
+  dialogRef: RefObject<HTMLDialogElement | null>;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+}) {
+  const id = useId();
+  return (
+    <dialog
+      ref={dialogRef}
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-description`}
+      className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-lg bg-white p-6 text-black shadow-lg backdrop:bg-black/50 dark:bg-zinc-900 dark:text-zinc-50"
+    >
+      <h2 id={`${id}-title`} className="text-lg font-semibold">
+        {title}
+      </h2>
+      <p
+        id={`${id}-description`}
+        className="mt-2 text-zinc-700 dark:text-zinc-300"
+      >
+        {description}
+      </p>
+      <div className="mt-6 flex flex-wrap justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => dialogRef.current?.close()}
+          className={`min-h-11 cursor-pointer rounded-lg border border-zinc-500 px-4 text-base transition hover:bg-zinc-100 dark:hover:bg-zinc-800 ${FOCUS_RING}`}
+        >
+          キャンセル
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          className={`min-h-11 cursor-pointer rounded-lg bg-red-700 px-4 text-base font-medium text-white transition hover:bg-red-800 dark:bg-red-300 dark:text-zinc-900 dark:hover:bg-red-200 ${FOCUS_RING}`}
+        >
+          {confirmLabel}
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
 function Progress({ completed, total }: { completed: number; total: number }) {
   return (
     <section className="flex flex-col gap-2">
@@ -203,9 +254,16 @@ export default function Home() {
   const [toastPaused, setToastPaused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listAreaRef = useRef<HTMLDivElement>(null);
+  const clearDialogRef = useRef<HTMLDialogElement>(null);
 
   const isLoading = items === null;
   const remaining = items?.filter((todo) => !todo.completed).length ?? 0;
+  const completedCount = (items?.length ?? 0) - remaining;
+
+  // 確認中に別タブで完了済みがなくなったら、消す対象がないので閉じる
+  useEffect(() => {
+    if (completedCount === 0) clearDialogRef.current?.close();
+  }, [completedCount]);
 
   // 通知にマウスやフォーカスがある間は、操作の途中で消えないように止める
   useEffect(() => {
@@ -270,6 +328,16 @@ export default function Home() {
     showToast("削除しました", <TrashIcon />, () =>
       handleUndoDelete(todo, index),
     );
+  }
+
+  function handleClearCompleted() {
+    const current = getSnapshot();
+    const next = current.filter((todo) => !todo.completed);
+    clearDialogRef.current?.close();
+    commit(next);
+    showToast(`${current.length - next.length}件削除しました`, <TrashIcon />);
+    // 開くときに押したボタンが消えるので、リストへフォーカスを移す
+    listAreaRef.current?.focus({ preventScroll: true });
   }
 
   return (
@@ -349,7 +417,7 @@ export default function Home() {
         )}
 
         {items !== null && items.length > 0 && (
-          <Progress completed={items.length - remaining} total={items.length} />
+          <Progress completed={completedCount} total={items.length} />
         )}
 
         <div ref={listAreaRef} tabIndex={-1} className="outline-none">
@@ -415,7 +483,28 @@ export default function Home() {
             </ul>
           )}
         </div>
+
+        {completedCount > 0 && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => clearDialogRef.current?.showModal()}
+              className={`flex min-h-11 cursor-pointer items-center gap-1 rounded-lg border border-zinc-500 bg-white px-3 text-base text-zinc-800 transition hover:border-red-700 hover:bg-red-50 hover:text-red-800 motion-safe:active:scale-95 dark:border-zinc-500 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-red-400 dark:hover:bg-red-950 dark:hover:text-red-200 ${FOCUS_RING}`}
+            >
+              <TrashIcon />
+              完了済みをまとめて削除
+            </button>
+          </div>
+        )}
       </main>
+
+      <ConfirmDialog
+        dialogRef={clearDialogRef}
+        title={`完了済みの${completedCount}件を削除しますか？`}
+        description="削除すると元に戻せません。"
+        confirmLabel="削除する"
+        onConfirm={handleClearCompleted}
+      />
 
       <div
         role="status"
