@@ -171,6 +171,29 @@ function ClipboardIcon({ className }: { className?: string }) {
   );
 }
 
+function Progress({ completed, total }: { completed: number; total: number }) {
+  return (
+    <section className="flex flex-col gap-2">
+      <p id="progress-label" className="font-medium text-black dark:text-zinc-50">
+        {total}件中{completed}件完了
+      </p>
+      <div
+        role="progressbar"
+        aria-labelledby="progress-label"
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={completed}
+        className="h-3 overflow-hidden rounded-full border border-blue-700 bg-white dark:border-blue-300 dark:bg-zinc-900"
+      >
+        <div
+          style={{ width: `${(completed / total) * 100}%` }}
+          className="h-full bg-blue-700 motion-safe:transition-[width] motion-safe:duration-300 dark:bg-blue-300"
+        />
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   const items = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const [text, setText] = useState("");
@@ -323,6 +346,10 @@ export default function Home() {
             <AlertIcon />
             保存できませんでした。このページを閉じると、変更が消えることがあります。
           </p>
+        )}
+
+        {items !== null && items.length > 0 && (
+          <Progress completed={items.length - remaining} total={items.length} />
         )}
 
         <div ref={listAreaRef} tabIndex={-1} className="outline-none">
